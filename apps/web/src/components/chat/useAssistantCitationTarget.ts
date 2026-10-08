@@ -89,7 +89,8 @@ export function useAssistantCitationTarget({
     };
     const source = entries.find(
       (entry) =>
-        entry.kind === "message" && entry.message.id === navigation.target.citation.messageId,
+        (entry.kind === "message" && entry.message.id === navigation.target.citation.messageId) ||
+        (entry.kind === "html-render" && entry.id === navigation.target.citation.messageId),
     );
     if (!source) {
       if (loadEarlier) {
@@ -112,7 +113,10 @@ export function useAssistantCitationTarget({
       );
       return;
     }
-    if (source.kind !== "message" || source.message.role !== "assistant") {
+    if (
+      source.kind !== "html-render" &&
+      (source.kind !== "message" || source.message.role !== "assistant")
+    ) {
       fail(
         "The citation does not refer to an assistant response",
         "The selected text is still saved in your citation.",
@@ -120,10 +124,18 @@ export function useAssistantCitationTarget({
       return;
     }
     const index = rows.findIndex(
-      (row) => row.kind === "message" && row.message.id === navigation.target.citation.messageId,
+      (row) =>
+        (row.kind === "message" && row.message.id === navigation.target.citation.messageId) ||
+        (row.kind === "html-render" && row.id === navigation.target.citation.messageId),
     );
     if (index < 0) {
-      if (source.message.runId) onExpandTurn(source.message.runId);
+      const runId =
+        source.kind === "html-render"
+          ? source.runId
+          : source.kind === "message"
+            ? source.message.runId
+            : null;
+      if (runId) onExpandTurn(runId);
       return;
     }
     if (listLoaded && listRef.current) setReady(navigation.target);
@@ -184,7 +196,11 @@ export function useAssistantCitationTarget({
   const positioning = request !== null && finishedKey !== request.key;
   const sourceRow =
     target && positioning
-      ? rows.find((row) => row.kind === "message" && row.message.id === target.citation.messageId)
+      ? rows.find(
+          (row) =>
+            (row.kind === "message" && row.message.id === target.citation.messageId) ||
+            (row.kind === "html-render" && row.id === target.citation.messageId),
+        )
       : undefined;
   return {
     target,

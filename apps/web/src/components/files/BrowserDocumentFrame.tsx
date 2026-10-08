@@ -33,6 +33,7 @@ import { useOpenChangeRequestLink } from "~/lib/openPullRequestLink";
 import { readLocalApi } from "~/localApi";
 import { cn } from "~/lib/utils";
 import { primaryServerKeybindingsAtom, serverEnvironment } from "~/state/server";
+import { injectHtmlSelectionBridge } from "~/lib/htmlRenderSelection";
 
 const PDF_VIEWER_FRAGMENT = "#toolbar=0&view=FitH";
 
@@ -117,12 +118,37 @@ export function HtmlRenderDocument(props: {
   readonly onFullscreenChange?: ((fullscreen: boolean) => void) | undefined;
   /** Called when the page has loaded. */
   readonly onLoad?: () => void;
+  readonly selectionBridge?: boolean;
 }) {
   const theme = useHtmlRenderTheme();
   const frameRef = useRef<HTMLIFrameElement>(null);
   const [src] = useState(() => `${props.src.split("#", 1)[0]}${htmlRenderThemeFragment(theme)}`);
   const [loaded, setLoaded] = useState(false);
   const [expandedImage, setExpandedImage] = useState<ExpandedImagePreview | null>(null);
+  const [selectionSrc, setSelectionSrc] = useState<string>();
+  const [selectionError, setSelectionError] = useState(false);
+  useEffect(() => {
+    if (!props.selectionBridge) return;
+    const controller = new AbortController();
+    let blobUrl: string | undefined;
+    void fetch(src, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error("Could not load HTML render");
+        const html = await response.text();
+        if (controller.signal.aborted) return;
+        blobUrl = URL.createObjectURL(
+          new Blob([injectHtmlSelectionBridge(html)], { type: "text/html" }),
+        );
+        setSelectionSrc(`${blobUrl}${src.slice(src.indexOf("#"))}`);
+      })
+      .catch(() => {
+        if (!controller.signal.aborted) setSelectionError(true);
+      });
+    return () => {
+      controller.abort();
+      if (blobUrl) URL.revokeObjectURL(blobUrl);
+    };
+  }, [props.selectionBridge, src]);
   const postTheme = () => {
     frameRef.current?.contentWindow?.postMessage(htmlRenderThemeMessage(theme), "*");
   };
@@ -286,21 +312,33 @@ export function HtmlRenderDocument(props: {
     window.addEventListener("message", resize);
     return () => window.removeEventListener("message", resize);
   }, [onContentHeight]);
+  if (selectionError)
+    return (
+      <p data-html-render-error className="text-muted-foreground text-xs">
+        Unable to load {props.title}
+      </p>
+    );
+  if (props.selectionBridge && !selectionSrc) return null;
   return (
     <>
       <iframe
         ref={frameRef}
-        src={src}
+        src={selectionSrc ?? src}
+        data-html-selection-bridge={props.selectionBridge || undefined}
         title={props.title}
         // Never allow-same-origin: the opaque origin keeps the page out of the app's session.
         sandbox="allow-scripts allow-forms"
-        loading="lazy"
+        loading={props.selectionBridge ? "eager" : "lazy"}
         onLoad={() => {
           setLoaded(true);
           // Covers a theme change that landed while the page was loading.
           postTheme();
           postShortcuts();
           props.onLoad?.();
+          if (props.selectionBridge) {
+            frameRef.current?.setAttribute("data-html-selection-ready", "true");
+            frameRef.current?.dispatchEvent(new Event("t3-html-selection-ready", { bubbles: true }));
+          }
         }}
         // A frame whose color scheme differs from its document's paints an opaque
         // canvas, so the blank document a frame starts with would flash white in
