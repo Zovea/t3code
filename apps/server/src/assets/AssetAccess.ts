@@ -819,6 +819,8 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
   };
 });
 
+const HTML_SELECTION_MAX_BYTES = 5 * 1024 * 1024;
+
 export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
   token: string,
   relativePath: string,
@@ -859,6 +861,8 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
     if (
       Option.isSome(info) &&
       info.value.type === "File" &&
+      // Keep large attachments on the streaming file path instead of buffering for injection.
+      info.value.size <= HTML_SELECTION_MAX_BYTES &&
       options?.htmlSelection &&
       !claims.download &&
       /\.html?$/i.test(attachmentPath)
