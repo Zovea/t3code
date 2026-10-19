@@ -895,6 +895,8 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
       Option.isSome(info) &&
       info.value.type === "File" &&
       options?.htmlSelection &&
+      // MCP apps keep their own size-bounded HTML path.
+      claims.renderIntent !== "mcp-app" &&
       !claims.download &&
       /\.html?$/i.test(attachmentPath)
     ) {
