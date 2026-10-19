@@ -1185,7 +1185,7 @@ describe("AssetAccess", () => {
       }).pipe(Effect.scoped, Effect.provide(layerTest)),
   );
 
-  it.effect("streams saved HTML past the selection size limit without the bridge", () =>
+  it.effect("streams saved HTML past the buffering limit with the bridge in its head", () =>
     Effect.gen(function* () {
       const config = yield* ServerConfig.ServerConfig;
       const fs = yield* FileSystem.FileSystem;
@@ -1211,8 +1211,15 @@ describe("AssetAccess", () => {
           htmlSelection: true,
         });
       expect((yield* resolve())?.kind).toBe("html");
-      yield* fs.writeFileString(filePath, "a".repeat(limit + 1));
-      expect(yield* resolve()).toMatchObject({ kind: "file", path: filePath });
+      const opening = "<!doctype html><html><head>";
+      yield* fs.writeFileString(filePath, `${opening}<title>Big</title></head>${"a".repeat(limit)}`);
+      const large = yield* resolve();
+      expect(large).toMatchObject({ kind: "html-stream", path: filePath, offset: opening.length });
+      if (large?.kind !== "html-stream") return;
+      const head = new TextDecoder().decode(large.head);
+      expect(head.startsWith(`${opening}<style>`)).toBe(true);
+      expect(head).toContain('method = "t3/selection"');
+      expect(head.endsWith("</script>")).toBe(true);
     }).pipe(Effect.scoped, Effect.provide(layerTest)),
   );
 
