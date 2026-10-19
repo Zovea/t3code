@@ -862,7 +862,7 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
       Option.isSome(info) &&
       info.value.type === "File" &&
       // Keep large attachments on the streaming file path instead of buffering for injection.
-      info.value.size <= HTML_SELECTION_MAX_BYTES &&
+      Number(info.value.size) <= HTML_SELECTION_MAX_BYTES &&
       options?.htmlSelection &&
       !claims.download &&
       /\.html?$/i.test(attachmentPath)
