@@ -470,7 +470,8 @@ function htmlRenderHeadInsertion(html: string, markup: string): HtmlRenderHeadIn
   const headOpen = /<head(?:\s[^>]*)?>/i.exec(scan);
   if (headOpen) return { at: headOpen.index + headOpen[0].length, markup };
   const htmlOpen = /<html(?:\s[^>]*)?>/i.exec(scan);
-  if (htmlOpen) return { at: htmlOpen.index + htmlOpen[0].length, markup: `<head>${markup}</head>` };
+  if (htmlOpen)
+    return { at: htmlOpen.index + htmlOpen[0].length, markup: `<head>${markup}</head>` };
   const doctype = /^\s*<!doctype[^>]*>/i.exec(html);
   if (doctype) return { at: doctype[0].length, markup: `<head>${markup}</head>` };
   return { at: 0, markup: `<!doctype html><head>${markup}</head>` };
