@@ -988,6 +988,11 @@ describe("AssetAccess", () => {
           expect("renderIntent" in asset ? asset.renderIntent : undefined).toBe(
             extension === "html" && disposition === "inline" ? "mcp-app" : undefined,
           );
+          expect(
+            yield* resolveAsset(suffix.slice(0, separator), suffix.slice(separator + 1), {
+              htmlSelection: true,
+            }),
+          ).toMatchObject({ kind: "file" });
           const token = suffix.slice(0, separator);
           const [payload, signature] = token.split(".");
           const claims = JSON.parse(Buffer.from(payload!, "base64url").toString("utf8"));
