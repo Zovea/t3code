@@ -8,7 +8,6 @@ import { ArrowUpRightIcon, PencilIcon, QuoteIcon } from "lucide-react";
 import {
   useEffect,
   useEffectEvent,
-  useMemo,
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
@@ -94,22 +93,18 @@ export function AssistantCitationChip({
   }, [citation, commentOpen, sourceAnchor, unavailableSourceAnchor]);
   // A multi-line selection's bounding box spans the full message width; anchor
   // the bubble to the selection's last line, where the pointer released.
-  const popupAnchor = useMemo(
-    () =>
-      activeSourceAnchor
-        ? {
-            contextElement: activeSourceAnchor.source,
-            getBoundingClientRect: () => {
-              const rects = activeSourceAnchor.range.getClientRects();
-              return (
-                rects.item(rects.length - 1) ?? activeSourceAnchor.range.getBoundingClientRect()
-              );
-            },
-          }
-        : undefined,
-    // oxlint-disable-next-line react/memo-dependencies -- Bridge range updates need a new virtual anchor even when its source object is unchanged.
-    [activeSourceAnchor, sourcePositionRevision],
-  );
+  const popupAnchor = activeSourceAnchor
+    ? {
+        contextElement: activeSourceAnchor.source,
+        // Bridge range updates keep the same source anchor; the revision makes the
+        // compiler hand the popup a new virtual anchor so it repositions.
+        positionRevision: sourcePositionRevision,
+        getBoundingClientRect: () => {
+          const rects = activeSourceAnchor.range.getClientRects();
+          return rects.item(rects.length - 1) ?? activeSourceAnchor.range.getBoundingClientRect();
+        },
+      }
+    : undefined;
   const label = assistantCitationLabel(citation);
   const sourceLinkProps = {
     to: "/$environmentId/$threadId" as const,
