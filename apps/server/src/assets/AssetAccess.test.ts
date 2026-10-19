@@ -1217,7 +1217,10 @@ describe("AssetAccess", () => {
         });
       expect((yield* resolve())?.kind).toBe("html");
       const opening = "<!doctype html><html><head>";
-      yield* fs.writeFileString(filePath, `${opening}<title>Big</title></head>${"a".repeat(limit)}`);
+      yield* fs.writeFileString(
+        filePath,
+        `${opening}<title>Big</title></head>${"a".repeat(limit)}`,
+      );
       const large = yield* resolve();
       expect(large).toMatchObject({ kind: "html-stream", path: filePath, offset: opening.length });
       if (large?.kind !== "html-stream") return;
