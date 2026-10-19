@@ -306,7 +306,9 @@ export function HtmlRenderDocument(props: {
           props.onLoad?.();
           if (props.selectionBridge) {
             frameRef.current?.setAttribute("data-html-selection-ready", "true");
-            frameRef.current?.dispatchEvent(new Event("t3-html-selection-ready", { bubbles: true }));
+            frameRef.current?.dispatchEvent(
+              new Event("t3-html-selection-ready", { bubbles: true }),
+            );
           }
         }}
         // A frame whose color scheme differs from its document's paints an opaque
