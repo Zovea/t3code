@@ -107,6 +107,18 @@ describe("HTML citation source navigation", () => {
     );
   });
 
+  it("finishes with a recovery message when the frame never becomes ready", () => {
+    vi.useFakeTimers();
+    const p = setup(false);
+    vi.advanceTimersByTime(5000);
+    expect(p.post).not.toHaveBeenCalled();
+    expect(p.request.onComplete).toHaveBeenCalledOnce();
+    expect(p.request.activationRef.current.dismissed).toBe(true);
+    expect(toast).toHaveBeenCalledWith(
+      expect.objectContaining({ title: "Could not open the cited HTML" }),
+    );
+  });
+
   it("updates a comment anchor and releases it when the quote disappears", () => {
     const p = setup();
     p.dispose();

@@ -1185,6 +1185,37 @@ describe("AssetAccess", () => {
       }).pipe(Effect.scoped, Effect.provide(layerTest)),
   );
 
+  it.effect("streams saved HTML past the selection size limit without the bridge", () =>
+    Effect.gen(function* () {
+      const config = yield* ServerConfig.ServerConfig;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const attachmentId = "thread-1-00000000-0000-4000-8000-000000000005-html";
+      const filePath = path.join(config.attachmentsDir, `${attachmentId}.html`);
+      const limit = 5 * 1024 * 1024;
+      yield* fs.makeDirectory(config.attachmentsDir, { recursive: true });
+      yield* fs.writeFileString(filePath, "a".repeat(limit));
+      const result = yield* issueAssetUrl({
+        resource: {
+          _tag: "attachment",
+          attachmentId,
+          fileName: "large.html",
+          mimeType: "text/html",
+          disposition: "inline",
+        },
+      });
+      const suffix = result.relativeUrl.slice(`${ASSET_ROUTE_PREFIX}/`.length);
+      const separator = suffix.indexOf("/");
+      const resolve = () =>
+        resolveAsset(suffix.slice(0, separator), suffix.slice(separator + 1), {
+          htmlSelection: true,
+        });
+      expect((yield* resolve())?.kind).toBe("html");
+      yield* fs.writeFileString(filePath, "a".repeat(limit + 1));
+      expect(yield* resolve()).toMatchObject({ kind: "file", path: filePath });
+    }).pipe(Effect.scoped, Effect.provide(layerTest)),
+  );
+
   it.effect("serves audio previews with their stored format and keeps saving explicit", () =>
     Effect.gen(function* () {
       const config = yield* ServerConfig.ServerConfig;
