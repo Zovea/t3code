@@ -832,7 +832,7 @@ const HTML_SELECTION_MAX_BYTES = 5 * 1024 * 1024;
 // Larger saved pages stream; only this much of their opening is scanned for the head.
 const HTML_SELECTION_OPENING_BYTES = 64 * 1024;
 
-const streamHtmlSelection = Effect.fn("AssetAccess.streamHtmlSelection")(function* (
+export const streamHtmlSelection = Effect.fn("AssetAccess.streamHtmlSelection")(function* (
   filePath: string,
 ) {
   const fileSystem = yield* FileSystem.FileSystem;

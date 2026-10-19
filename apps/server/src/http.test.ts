@@ -15,7 +15,9 @@ import * as PlatformError from "effect/PlatformError";
 import * as Queue from "effect/Queue";
 import * as Tracer from "effect/Tracer";
 import { HttpClient, HttpClientRequest, HttpRouter, HttpServerResponse } from "effect/http";
+import { streamHtmlSelection } from "./assets/AssetAccess.ts";
 import { openMediaFile } from "./assets/MediaFile.ts";
+import { injectHtmlSelectionBridge } from "@t3tools/shared/htmlRender";
 
 import {
   injectMcpAppCsp,
@@ -31,6 +33,7 @@ import {
   assetResponseHeaders,
   assetFileResponse,
   downloadContentDisposition,
+  htmlSelectionStreamResponse,
   isLoopbackHostname,
   resolveDevRedirectUrl,
   withUntracedRequests,
@@ -97,6 +100,30 @@ describe("MCP app asset responses", () => {
       yield* fs.writeFileString(file, "x".repeat(MCP_APP_MAX_HTML_BYTES + 128 * 1024 + 1));
       const response = yield* assetFileResponse({ path: file, renderIntent: "mcp-app" });
       expect(response.status).toBe(413);
+    }).pipe(Effect.provide(layerFileResponse)),
+  );
+});
+
+describe("HTML selection stream responses", () => {
+  it.effect("streams the same document a buffered bridge injection produces", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-html-selection-" });
+      const file = path.join(directory, "large.html");
+      // Multi-byte text on both sides of the 64 KiB opening checks the byte offset.
+      const pages = [
+        `<!doctype html><html><head><title>☃</title></head><body>${"☃a".repeat(40_000)}</body></html>`,
+        `<!doctype html>${"<p>☃</p>".repeat(20_000)}`,
+      ];
+      for (const html of pages) {
+        yield* fs.writeFileString(file, html);
+        const response = HttpServerResponse.toWeb(
+          yield* htmlSelectionStreamResponse(yield* streamHtmlSelection(file)),
+        );
+        expect(response.headers.get("content-type")).toBe("text/html; charset=utf-8");
+        expect(yield* Effect.promise(() => response.text())).toBe(injectHtmlSelectionBridge(html));
+      }
     }).pipe(Effect.provide(layerFileResponse)),
   );
 });

@@ -161,6 +161,20 @@ function assetByteRange(header: string, size: bigint) {
   };
 }
 
+/** Sends a large saved page's bridged opening, then streams the rest of the file. */
+export const htmlSelectionStreamResponse = Effect.fn("htmlSelectionStreamResponse")(
+  function* (asset: { readonly path: string; readonly head: Uint8Array; readonly offset: number }) {
+    const fileSystem = yield* FileSystem.FileSystem;
+    return HttpServerResponse.stream(
+      Stream.concat(
+        Stream.make(asset.head),
+        fileSystem.stream(asset.path, { offset: asset.offset }),
+      ),
+      { headers: assetResponseHeaders("inline.html") },
+    );
+  },
+);
+
 export const assetFileResponse = Effect.fn("assetFileResponse")(function* (
   asset: {
     readonly path: string;
@@ -430,14 +444,7 @@ export const layerAssetRoute = HttpRouter.add(
       return HttpServerResponse.text(asset.html, { headers: assetResponseHeaders("inline.html") });
     }
     if (asset.kind === "html-stream") {
-      const fileSystem = yield* FileSystem.FileSystem;
-      return HttpServerResponse.stream(
-        Stream.concat(
-          Stream.make(asset.head),
-          fileSystem.stream(asset.path, { offset: asset.offset }),
-        ),
-        { headers: assetResponseHeaders("inline.html") },
-      );
+      return yield* htmlSelectionStreamResponse(asset);
     }
     if (asset.kind === "bytes") {
       return HttpServerResponse.uint8Array(asset.bytes, {
