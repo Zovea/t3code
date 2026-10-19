@@ -428,6 +428,16 @@ export const layerAssetRoute = HttpRouter.add(
     if (asset.kind === "html") {
       return HttpServerResponse.text(asset.html, { headers: assetResponseHeaders("inline.html") });
     }
+    if (asset.kind === "html-stream") {
+      const fileSystem = yield* FileSystem.FileSystem;
+      return HttpServerResponse.stream(
+        Stream.concat(
+          Stream.make(asset.head),
+          fileSystem.stream(asset.path, { offset: asset.offset }),
+        ),
+        { headers: assetResponseHeaders("inline.html") },
+      );
+    }
     if (asset.kind === "bytes") {
       return HttpServerResponse.uint8Array(asset.bytes, {
         contentType: asset.mimeType,

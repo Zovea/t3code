@@ -506,31 +506,36 @@ export function injectHtmlRenderBootstrap(html: string): string {
   return injectHtmlRenderHead(html, markup);
 }
 
+const HTML_SELECTION_BRIDGE_MARKUP = `<style>::highlight(t3-html-citation){background:color-mix(in srgb,var(--accent) 45%,transparent)}</style><script>${HTML_RENDER_SELECTION_SCRIPT}</script>`;
+
 /** Adds selection support to saved renders without changing their stored contents. */
 export function injectHtmlSelectionBridge(html: string): string {
-  return injectHtmlRenderHead(
-    html,
-    `<style>::highlight(t3-html-citation){background:color-mix(in srgb,var(--accent) 45%,transparent)}</style><script>${HTML_RENDER_SELECTION_SCRIPT}</script>`,
-  );
+  return injectHtmlRenderHead(html, HTML_SELECTION_BRIDGE_MARKUP);
+}
+
+/**
+ * Where the selection bridge goes when only a page's opening is read, so large
+ * pages can stream. Decode the opening bytes as latin1 to get a byte offset.
+ */
+export function htmlSelectionBridgeInsertion(opening: string): HtmlRenderHeadInsertion {
+  return htmlRenderHeadInsertion(opening, HTML_SELECTION_BRIDGE_MARKUP);
 }
 
 /** Inserts host-owned bridge markup ahead of an agent page's head content. */
 function injectHtmlRenderHead(html: string, markup: string): string {
+  const insertion = htmlRenderHeadInsertion(html, markup);
+  return html.slice(0, insertion.at) + insertion.markup + html.slice(insertion.at);
+}
+
+export type HtmlRenderHeadInsertion = { readonly at: number; readonly markup: string };
+
+function htmlRenderHeadInsertion(html: string, markup: string): HtmlRenderHeadInsertion {
   const scan = blankNonMarkup(html);
   const headOpen = /<head(?:\s[^>]*)?>/i.exec(scan);
-  if (headOpen) {
-    const at = headOpen.index + headOpen[0].length;
-    return html.slice(0, at) + markup + html.slice(at);
-  }
+  if (headOpen) return { at: headOpen.index + headOpen[0].length, markup };
   const htmlOpen = /<html(?:\s[^>]*)?>/i.exec(scan);
-  if (htmlOpen) {
-    const at = htmlOpen.index + htmlOpen[0].length;
-    return `${html.slice(0, at)}<head>${markup}</head>${html.slice(at)}`;
-  }
+  if (htmlOpen) return { at: htmlOpen.index + htmlOpen[0].length, markup: `<head>${markup}</head>` };
   const doctype = /^\s*<!doctype[^>]*>/i.exec(html);
-  if (doctype) {
-    const at = doctype[0].length;
-    return `${html.slice(0, at)}<head>${markup}</head>${html.slice(at)}`;
-  }
-  return `<!doctype html><head>${markup}</head>${html}`;
+  if (doctype) return { at: doctype[0].length, markup: `<head>${markup}</head>` };
+  return { at: 0, markup: `<!doctype html><head>${markup}</head>` };
 }

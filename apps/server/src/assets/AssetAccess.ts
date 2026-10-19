@@ -1,5 +1,8 @@
 import type { AssetResource } from "@t3tools/contracts";
-import { injectHtmlSelectionBridge } from "@t3tools/shared/htmlRender";
+import {
+  htmlSelectionBridgeInsertion,
+  injectHtmlSelectionBridge,
+} from "@t3tools/shared/htmlRender";
 import {
   AssetAttachmentNotFoundError,
   AssetGitHubMediaUrlValidationError,
@@ -174,6 +177,12 @@ const encodeAssetClaims = Schema.encodeSync(AssetClaimsJson);
 
 export type ResolvedAsset =
   | { readonly kind: "html"; readonly html: string }
+  | {
+      readonly kind: "html-stream";
+      readonly path: string;
+      readonly head: Uint8Array;
+      readonly offset: number;
+    }
   | {
       readonly kind: "file";
       readonly path: string;
@@ -820,6 +829,30 @@ export const issueAssetUrl = Effect.fn("AssetAccess.issueAssetUrl")(function* (i
 });
 
 const HTML_SELECTION_MAX_BYTES = 5 * 1024 * 1024;
+// Larger saved pages stream; only this much of their opening is scanned for the head.
+const HTML_SELECTION_OPENING_BYTES = 64 * 1024;
+
+const streamHtmlSelection = Effect.fn("AssetAccess.streamHtmlSelection")(function* (
+  filePath: string,
+) {
+  const fileSystem = yield* FileSystem.FileSystem;
+  const chunks = yield* Stream.runCollect(
+    fileSystem.stream(filePath, { bytesToRead: HTML_SELECTION_OPENING_BYTES }),
+  );
+  const opening = new Uint8Array(chunks.reduce((total, chunk) => total + chunk.byteLength, 0));
+  let position = 0;
+  for (const chunk of chunks) {
+    opening.set(chunk, position);
+    position += chunk.byteLength;
+  }
+  // latin1 keeps one character per byte, so the insertion point is a byte offset.
+  const insertion = htmlSelectionBridgeInsertion(new TextDecoder("latin1").decode(opening));
+  const markup = new TextEncoder().encode(insertion.markup);
+  const head = new Uint8Array(insertion.at + markup.byteLength);
+  head.set(opening.subarray(0, insertion.at));
+  head.set(markup, insertion.at);
+  return { kind: "html-stream" as const, path: filePath, head, offset: insertion.at };
+});
 
 export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
   token: string,
@@ -861,12 +894,14 @@ export const resolveAsset = Effect.fn("AssetAccess.resolveAsset")(function* (
     if (
       Option.isSome(info) &&
       info.value.type === "File" &&
-      // Keep large attachments on the streaming file path instead of buffering for injection.
-      Number(info.value.size) <= HTML_SELECTION_MAX_BYTES &&
       options?.htmlSelection &&
       !claims.download &&
       /\.html?$/i.test(attachmentPath)
     ) {
+      // Large attachments stream instead of buffering the whole page for injection.
+      if (Number(info.value.size) > HTML_SELECTION_MAX_BYTES) {
+        return yield* streamHtmlSelection(attachmentPath).pipe(Effect.orElseSucceed(() => null));
+      }
       return yield* fileSystem.readFileString(attachmentPath).pipe(
         Effect.map((html) => ({ kind: "html" as const, html: injectHtmlSelectionBridge(html) })),
         Effect.orElseSucceed(() => null),
