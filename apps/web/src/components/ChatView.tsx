@@ -1740,6 +1740,26 @@ export default function ChatView(props: ChatViewProps) {
     composerRef.current?.focusAtEnd();
   };
   const focusComposerStable = useStableCallback(focusComposer);
+  const focusMaximizedBrowser = () => {
+    if (
+      !rightPanelMaximized ||
+      activeRightPanelSurface?.kind !== "preview" ||
+      !activeRightPanelSurface.resourceId ||
+      !activeThreadRef
+    ) {
+      return false;
+    }
+    const runtimeTabId = previewRuntimeTabId(
+      activeThreadRef,
+      activePreviewServerEpoch,
+      activeRightPanelSurface.resourceId,
+    );
+    document
+      .querySelector<HTMLElement>(`webview[data-preview-tab="${CSS.escape(runtimeTabId)}"]`)
+      ?.focus();
+    return true;
+  };
+  const focusMaximizedBrowserStable = useStableCallback(focusMaximizedBrowser);
   const canInterruptRunningThread =
     canOperateThread && deriveCanInterruptRunningThread(activeThread !== undefined, activeRuntime);
   const onInterrupt = async () => {
@@ -2030,12 +2050,29 @@ export default function ChatView(props: ChatViewProps) {
   useEffect(() => {
     if (!activeThread?.id || terminalUiState.terminalOpen) return;
     const frame = window.requestAnimationFrame(() => {
-      focusComposerStable();
+      if (!focusMaximizedBrowserStable()) focusComposerStable();
     });
     return () => {
       window.cancelAnimationFrame(frame);
     };
-  }, [activeThread?.id, focusComposerStable, terminalUiState.terminalOpen]);
+  }, [
+    activeThread?.id,
+    focusComposerStable,
+    focusMaximizedBrowserStable,
+    terminalUiState.terminalOpen,
+  ]);
+
+  // oxlint-disable-next-line t3code/react-effect-budget -- Activating the maximized browser needs to move focus into its guest.
+  useEffect(() => {
+    if (!rightPanelMaximized || activeRightPanelSurface?.kind !== "preview") return;
+    const frame = window.requestAnimationFrame(() => focusMaximizedBrowserStable());
+    return () => window.cancelAnimationFrame(frame);
+  }, [
+    activeRightPanelSurface?.id,
+    activeRightPanelSurface?.kind,
+    focusMaximizedBrowserStable,
+    rightPanelMaximized,
+  ]);
 
   useEffect(() => {
     if (!activeThread?.id || terminalUiState.terminalOpen || isMobileViewport) return;
@@ -2047,7 +2084,13 @@ export default function ChatView(props: ChatViewProps) {
         frame = window.requestAnimationFrame(() => {
           frame = null;
           if (document.querySelector("[data-mcp-app-fullscreen]") !== null) return;
-          if (shouldRefocusComposerOnWindowFocus(document.activeElement)) focusComposerStable();
+          if (shouldRefocusComposerOnWindowFocus(document.activeElement)) {
+            if (rightPanelMaximized && activeRightPanelSurface?.kind === "preview") {
+              if (document.activeElement === document.body) focusMaximizedBrowserStable();
+            } else {
+              focusComposerStable();
+            }
+          }
         });
       });
     };
@@ -2056,7 +2099,15 @@ export default function ChatView(props: ChatViewProps) {
       window.removeEventListener("focus", onWindowFocus);
       if (frame !== null) window.cancelAnimationFrame(frame);
     };
-  }, [activeThread?.id, focusComposerStable, isMobileViewport, terminalUiState.terminalOpen]);
+  }, [
+    activeThread?.id,
+    activeRightPanelSurface?.kind,
+    focusComposerStable,
+    focusMaximizedBrowserStable,
+    isMobileViewport,
+    rightPanelMaximized,
+    terminalUiState.terminalOpen,
+  ]);
 
   useEffect(() => {
     if (!activeThread?.id) return;
